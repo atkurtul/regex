@@ -1,3 +1,4 @@
+#pragma once
 
 #include <assert.h>
 #include <stdint.h>
@@ -12,12 +13,12 @@
 typedef uint8_t u8;
 typedef uint32_t u32;
 
-#define ALPHABET_WIDTH 1
+#define ALPHABET_WIDTH 8
 
 template <class T>
 T* alloc(T t, const char* file, int line) {
   T* p = new T(t);
-  printf("Allocationg %s at ./%s:%d\n", typeid(T).name(), file, line);
+  // printf("Allocationg %s at ./%s:%d\n", typeid(T).name(), file, line);
   return p;
 }
 
@@ -29,20 +30,25 @@ T* alloc(T t, const char* file, int line) {
   }
 
 struct DFA {
-  DFA* edges[(1<<ALPHABET_WIDTH)];
-  bool halting;
+  static DFA* trap;
+
+  DFA* edges[(1 << ALPHABET_WIDTH)];
+  bool halt;
   inline static int next_id = 0;
   int id = next_id++;
   void print_(std::set<DFA*>& visited);
   void print();
-  bool is_trap();
+
+  bool is_trap() { return this == trap; }
   void print_dot_(FILE* f, std::set<DFA*>& visited);
   void print_dot(std::string file);
 
   bool operator==(DFA const& r) const {
-    if (halting != r.halting)
+    if (this == &r)
+      return true;
+    if (halt != r.halt)
       return false;
-    for (int i = 0; i < (1<<ALPHABET_WIDTH); i++)
+    for (int i = 0; i < (1 << ALPHABET_WIDTH); i++)
       if (edges[i] != r.edges[i])
         return false;
     return true;
@@ -122,7 +128,7 @@ struct DFA {
 
 struct NFA {
   std::map<u8, std::set<NFA*>> edges;
-  bool halting;
+  bool halt;
   inline static int next_id = 0;
   int id = next_id++;
 
@@ -132,7 +138,7 @@ struct NFA {
     visited.insert(this);
     const char* tag[] = {"@", "$"};
 
-    printf("%s[%d]:\n", tag[halting], id);
+    printf("%s[%d]:\n", tag[halt], id);
     for (auto& [c, v] : edges) {
       printf("\t%c -> [ ", c);
       for (auto& n : v)
@@ -156,10 +162,10 @@ struct NFA {
 
     DFA* dfa = cache[nfa] = ALLOC(DFA{});
 
-    for (int i = 0; i < (1<<ALPHABET_WIDTH); ++i) {
+    for (int i = 0; i < (1 << ALPHABET_WIDTH); ++i) {
       std::set<NFA*> merged;
       for (auto n : nfa) {
-        dfa->halting |= n->halting;
+        dfa->halt |= n->halt;
         merged.insert(n->edges[i].begin(), n->edges[i].end());
       }
       dfa->edges[i] = to_dfa_(merged, cache);
@@ -169,17 +175,14 @@ struct NFA {
   }
 
   DFA* to_dfa() {
-    DFA* trap = ALLOC(DFA{});
-    for (int i = 0; i < (1<<ALPHABET_WIDTH); ++i)
-      trap->edges[i] = trap;
     std::map<std::set<NFA*>, DFA*> cache;
-    cache[{}] = trap;
+    cache[{}] = DFA::trap;
     return to_dfa_(std::set<NFA*>{this}, cache);
   }
 };
 
 struct Label {
-  std::bitset<(1<<ALPHABET_WIDTH)> c;
+  std::bitset<(1 << ALPHABET_WIDTH)> c;
   enum { JMP, ALT, HALT } tag;
   Label* next;
   Label* alt;
@@ -199,10 +202,10 @@ struct Label {
 
     NFA* nfa = cache[this] = ALLOC(NFA{});
     std::set<Label*> self;
-    gather(nfa->halting, self);
+    gather(nfa->halt, self);
 
     for (auto e : self)
-      for (int i = 0; i < (1<<ALPHABET_WIDTH); ++i)
+      for (int i = 0; i < (1 << ALPHABET_WIDTH); ++i)
         if (e->c.test(i))
           nfa->edges[i].insert(e->next->to_nfa_(cache));
 
@@ -232,5 +235,7 @@ struct Label {
 
 Label* compile(std::string p);
 DFA* compile_dfa(std::string p);
-std::string match(const char* pat, const char* str);
-std::string match(DFA* pat, std::string str);
+int match(Label* pat, const char* str, const u32 len);
+int match(DFA* pat, const char* str, const u32 len);
+
+int match(const char* pat, const char* str, const u32 len);

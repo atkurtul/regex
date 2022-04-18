@@ -5,9 +5,13 @@ Label* parse_cat(const char*& p, Label*);
 Label* parse_alt(const char*& p, Label*);
 
 Label* parse_atom(const char*& p, Label* tail) {
-  char c = *p++;
-  std::bitset<(1 << ALPHABET_WIDTH)> bs[8 / ALPHABET_WIDTH] = {};
+  char c = *p++, x;
 
+  std::bitset<(1 << ALPHABET_WIDTH)> bs[8 / ALPHABET_WIDTH] = {};
+  if (*p == '\\') {
+    ++p;
+    goto DEFAULT;
+  }
   switch (c) {
     case '.':
       for (auto& s : bs)
@@ -26,26 +30,33 @@ Label* parse_atom(const char*& p, Label* tail) {
             assert(p[0] == '[');
             break;
           case '-':
-            for (c = *p++; c <= p[-3]; c++) {
+            for (char q = *p++; q <= p[-3]; q++) {
+              x = q;
               for (auto& s : bs) {
-                s.set(c % (1 << ALPHABET_WIDTH));
-                c /= (1 << ALPHABET_WIDTH);
+                s.set(x % (1 << ALPHABET_WIDTH));
+                x /= (1 << ALPHABET_WIDTH);
               }
             }
             break;
           case 0:
             impossible;
           default:
+            x = c;
             for (auto& s : bs) {
-              s.set(c % (1 << ALPHABET_WIDTH));
-              c /= (1 << ALPHABET_WIDTH);
+              s.set(x % (1 << ALPHABET_WIDTH));
+              x /= (1 << ALPHABET_WIDTH);
             }
         }
+
       break;
+    case 0:
+      impossible;
     default:
+    DEFAULT:
+      x = c;
       for (auto& s : bs) {
-        s.set(c % (1 << ALPHABET_WIDTH));
-        c /= (1 << ALPHABET_WIDTH);
+        s.set(x % (1 << ALPHABET_WIDTH));
+        x /= (1 << ALPHABET_WIDTH);
       }
   }
 
@@ -56,28 +67,54 @@ Label* parse_atom(const char*& p, Label* tail) {
 }
 
 Label* parse_post(const char*& p, Label* tail) {
-  Label* post = tail;
+  if (p[1] == '\\')
+    return parse_atom(p, tail);
+  int n = 0;
+  Label* tmp;
   switch (*p) {
     case '*':
       p++;
-      post = ALLOC(Label{
+      tail = ALLOC(Label{
           .tag = Label::ALT,
           .alt = tail,
       });
-      post->next = parse_atom(p, post);
+      tail->next = parse_atom(p, tail);
+      break;
+    case '+':
+      p++;
+      tail = ALLOC(Label{
+          .tag = Label::ALT,
+          .alt = tail,
+      });
+      tail = tail->next = parse_atom(p, tail);
       break;
     case '?':
       p++;
-      post = ALLOC(Label{
+      tail = ALLOC(Label{
           .tag = Label::ALT,
           .next = parse_atom(p, tail),
           .alt = tail,
       });
       break;
+    case '}':
+      while ((*++p) != '{') {
+        assert(isdigit(*p));
+        n *= 10;
+        n += *p - '0';
+      }
+      ++p;
+      assert(n > 0);
+      const char* head;
+      while (n--) {
+        head = p;
+        tail = parse_atom(head, tail);
+      }
+      p = head;
+      break;
     default:
       return parse_atom(p, tail);
   }
-  return post;
+  return tail;
 }
 
 Label* parse_cat(const char*& p, Label* tail) {
@@ -86,6 +123,9 @@ Label* parse_cat(const char*& p, Label* tail) {
     switch (*p) {
       case '|':
       case '(':
+        if (p[1] != '\\')
+          return cat;
+        break;
       case 0:
         return cat;
     }
@@ -96,7 +136,7 @@ Label* parse_cat(const char*& p, Label* tail) {
 
 Label* parse_alt(const char*& p, Label* tail) {
   Label* alt = parse_cat(p, tail);
-  while (*p && *p == '|') {
+  while (*p && (*p == '|' && p[1] != '\\')) {
     ++p;
     alt = ALLOC(Label{
         .tag = Label::ALT,
@@ -122,13 +162,14 @@ DFA* compile_dfa(std::string p) {
   return l->to_nfa()->to_dfa();
 }
 
-std::string match(Label* pat, std::string str) {
+int match(Label* pat, const char* str, const u32 len) {
   std::vector<Label*> front = {pat};
   std::vector<Label*> back = {};
 
-  int last = 0;
+  int last = -1;
   int cur = 0;
-  for (; cur < str.length(); ++cur) {
+
+  for (; cur < len; ++cur) {
     bool match = false;
     for (auto state : front)
       match |= state->match(str[cur], back);
@@ -137,38 +178,35 @@ std::string match(Label* pat, std::string str) {
       last = cur;
 
     if (back.empty())
-      return str.substr(0, last);
+      return last;
 
     front.clear();
     front.swap(back);
   }
 
-  for (auto state : front) {
-    if (state->has_match()) {
-      return str.substr(0, cur);
-    }
-  }
+  for (auto state : front)
+    if (state->has_match())
+      return cur;
 
-  return str.substr(0, last);
+  return last;
 }
 
-std::string match(DFA* pat, std::string str) {
-  DFA* state = pat;
-  u32 cur = 0;
-  u32 last = 0;
-  const u32 len = str.length();
-  while (state && cur < len) {
-    if (state->halting)
+int match(DFA* state, const char* str, const u32 len) {
+  int last = -1;
+  int cur = 0;
+
+  while (!state->is_trap() && cur < len) {
+    if (state->halt)
       last = cur;
     state = state->edges[str[cur++]];
   }
 
-  if (state && state->halting)
+  if (state->halt)
     last = cur;
 
-  return str.substr(0, last);
+  return last;
 }
 
-std::string match(const char* pat, const char* str) {
-  return match(compile_dfa(pat), str);
+int match(const char* pat, const char* str, const u32 len) {
+  return match(compile_dfa(pat), str, len);
 }

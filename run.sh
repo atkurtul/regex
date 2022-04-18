@@ -7,4 +7,4 @@ cmake .. -GNinja
 cmake --build .
 cd ..
 ./build/regex
-dot -Tpng dfa.dot -o dfa.png
+dot -Tpng dfa.dot -o dfa.png -Goverlap=scale

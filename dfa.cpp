@@ -1,4 +1,14 @@
+#include <stdio.h>
 #include "nfa.h"
+
+static DFA* init_trap() {
+  DFA* trap = ALLOC(DFA{});
+  for (int i = 0; i < (1 << ALPHABET_WIDTH); ++i)
+    trap->edges[i] = trap;
+  return trap;
+}
+
+DFA* DFA::trap = init_trap();
 
 void DFA::print_(std::set<DFA*>& visited) {
   if (visited.contains(this))
@@ -6,7 +16,7 @@ void DFA::print_(std::set<DFA*>& visited) {
   visited.insert(this);
   const char* tag[] = {"@", "$"};
 
-  printf("%s[%d]:\n", tag[halting], id);
+  printf("%s[%d]:\n", tag[halt], id);
 
   for (int i = 0; i < (1 << ALPHABET_WIDTH); ++i)
     printf("\t%d -> [ %d ]\n", i, edges[i]->id);
@@ -20,23 +30,13 @@ void DFA::print() {
   print_(v);
 }
 
-bool DFA::is_trap() {
-  if (halting)
-    return false;
-  for (auto e : edges)
-    if (e != this)
-      return false;
-  return true;
-}
-
 void DFA::print_dot_(FILE* f, std::set<DFA*>& visited) {
   if (visited.contains(this))
     return;
   visited.insert(this);
 
   const char* col[] = {"green", "yellow", "red"};
-  fprintf(f, "\t%d [style=filled;fillcolor=%s];\n", id,
-          col[!halting + is_trap()]);
+  fprintf(f, "\t%d [style=filled;fillcolor=%s];\n", id, col[!halt + is_trap()]);
 
   std::map<DFA*, std::set<int>> next;
   std::map<DFA*, std::vector<std::pair<int, int>>> dfa_ranges;
@@ -81,4 +81,5 @@ void DFA::print_dot(std::string file) {
   fprintf(f, "digraph {\n");
   print_dot_(f, visited);
   fprintf(f, "}\n");
+  fclose(f);
 }
