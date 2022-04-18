@@ -136,7 +136,8 @@ std::string match(DFA* pat, std::string str) {
   DFA* state = pat;
   u32 cur = 0;
   u32 last = 0;
-  while (state) {
+  const u32 len = str.length();
+  while (state && cur < len) {
     if (state->halting)
       last = cur;
     state = state->edges[str[cur++]];

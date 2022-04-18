@@ -32,26 +32,82 @@ struct DFA {
   inline static int next_id = 0;
   int id = next_id++;
 
-  void print_(std::set<DFA*>& visited) {
-    if (visited.contains(this))
-      return;
-    visited.insert(this);
-    const char* tag[] = {"@", "$"};
+  void print_(std::set<DFA*>& visited);
+  void print();
+  bool is_trap();
+  void print_dot_(FILE* f, std::set<DFA*>& visited);
+  void print_dot(std::string file);
 
-    printf("%s[%d]:\n", tag[halting], id);
+  bool operator==(DFA const& r) const {
+    if (halting != r.halting)
+      return false;
 
-    for (int i = 0; i < 256; ++i)
-      if (edges[i])
-        printf("\t%d -> [ %d ]\n", i, edges[i]->id);
+    for (int i = 0; i < 256; i++)
+      if (edges[i] != r.edges[i])
+        return false;
 
-    for (int i = 0; i < 256; ++i)
-      if (edges[i])
-        edges[i]->print_(visited);
+    return true;
   }
 
-  void print() {
-    std::set<DFA*> v = {};
-    print_(v);
+  DFA* find_remapping(std::set<DFA*> const& pool, std::map<DFA*, DFA*>& remap) {
+    if (auto it = remap.find(this); it != remap.end()) {
+      return it->second;
+    }
+
+    DFA* mapping = this;
+    std::set<DFA*> remapped_to_this;
+
+    for (auto& dfa : pool) {
+      if (this != dfa && *this == *dfa) {
+        if (auto it = remap.find(dfa); it != remap.end()) {
+          mapping = remap[this] = it->second;
+          for (auto dfa : remapped_to_this)
+            remap[dfa] = mapping;
+          break;
+        } else {
+          remap[dfa] = this;
+          remapped_to_this.insert(dfa);
+        }
+      }
+    }
+    return mapping;
+  }
+
+  void remap(std::map<DFA*, DFA*>& remap) {
+    for (auto& e : edges)
+      if (auto it = remap.find(e); it != remap.end())
+        e = it->second;
+  }
+
+  static DFA* minimize(DFA* root) {
+    std::set<DFA*> pool;
+    std::map<DFA*, DFA*> remap;
+    root->gather(pool);
+
+    do {
+      remap.clear();
+      for (auto dfa : pool)
+        dfa->find_remapping(pool, remap);
+      if (auto it = remap.find(root); it != remap.end())
+        root = it->second;
+      for (auto [dfa, _] : remap) {
+        pool.erase(dfa);
+        delete dfa;
+      }
+
+      for (auto dfa : pool)
+        dfa->remap(remap);
+
+    } while (!remap.empty());
+    return root;
+  }
+
+  void gather(std::set<DFA*>& pool) {
+    if (pool.contains(this))
+      return;
+    pool.insert(this);
+    for (auto e : edges)
+      e->gather(pool);
   }
 };
 
@@ -86,13 +142,11 @@ struct NFA {
 
   static DFA* to_dfa_(std::set<NFA*> nfa,
                       std::map<std::set<NFA*>, DFA*>& cache) {
-    if (nfa.empty())
-      return 0;
-
     if (auto dfa = cache.find(nfa); dfa != cache.end())
       return dfa->second;
 
     DFA* dfa = cache[nfa] = ALLOC(DFA{});
+
     for (int i = 0; i < 256; ++i) {
       std::set<NFA*> merged;
       for (auto n : nfa) {
@@ -106,7 +160,11 @@ struct NFA {
   }
 
   DFA* to_dfa() {
+    DFA* trap = new DFA{};
+    for (int i = 0; i < 256; ++i)
+      trap->edges[i] = trap;
     std::map<std::set<NFA*>, DFA*> cache;
+    cache[{}] = trap;
     return to_dfa_(std::set<NFA*>{this}, cache);
   }
 };

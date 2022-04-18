@@ -1,11 +1,12 @@
 #include "nfa.h"
 
 int main() {
-  auto dfa = compile("([A-Za-z0-9]*abc*|a)(a*|ab*a*)");
+  auto dfa = compile("xyzw(xyzw)*");
   // printf("%zu\n", nfa->edges.size());
 
   printf("------------\n");
-  // dfa->print();
-  printf("%s\n", match(dfa, "xabcaaaaaaaaaaaaaaaaaaa").c_str());
+  dfa = DFA::minimize(dfa);
+  dfa->print_dot("dfa.dot");
+  printf("%s\n", match(dfa, "111x222").c_str());
   printf("Succ\n");
 }
