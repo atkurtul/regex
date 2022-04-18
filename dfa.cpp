@@ -8,10 +8,10 @@ void DFA::print_(std::set<DFA*>& visited) {
 
   printf("%s[%d]:\n", tag[halting], id);
 
-  for (int i = 0; i < 256; ++i)
+  for (int i = 0; i < (1 << ALPHABET_WIDTH); ++i)
     printf("\t%d -> [ %d ]\n", i, edges[i]->id);
 
-  for (int i = 0; i < 256; ++i)
+  for (int i = 0; i < (1 << ALPHABET_WIDTH); ++i)
     edges[i]->print_(visited);
 }
 
@@ -40,7 +40,8 @@ void DFA::print_dot_(FILE* f, std::set<DFA*>& visited) {
 
   std::map<DFA*, std::set<int>> next;
   std::map<DFA*, std::vector<std::pair<int, int>>> dfa_ranges;
-  for (int i = 0; i < 256; ++i)
+
+  for (int i = 0; i < (1 << ALPHABET_WIDTH); ++i)
     next[edges[i]].insert(i);
 
   for (auto& [dfa, edge] : next) {
@@ -62,19 +63,14 @@ void DFA::print_dot_(FILE* f, std::set<DFA*>& visited) {
     fprintf(f, "\t%d -> %d [label=\"", id, dfa->id);
     for (auto& [l, r] : ranges) {
       if (l == r)
-        if (l >= 33 && l <= 126)
-          fprintf(f, "%c", l);
-        else
-          fprintf(f, " 0x%X ", l);
-      else if ((l >= 33 && l <= 126) && (r >= 33 && r <= 126))
-        fprintf(f, "[%c-%c]", l, r);
+        fprintf(f, " %d ", l);
       else
-        fprintf(f, "[0x%X-0x%X]", l, r);
+        fprintf(f, "[%d-%d]", l, r);
     }
     fprintf(f, "\"];\n");
   }
 
-  for (int i = 0; i < 256; ++i)
+  for (int i = 0; i < (1 << ALPHABET_WIDTH); ++i)
     edges[i]->print_dot_(f, visited);
 }
 

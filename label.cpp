@@ -9,23 +9,30 @@ void Label::print_header(int d) {
   printf("\n");
 }
 
-void Label::print(int d, Label* inc) {
+void Label::print_(int d, std::set<Label*>& vis) {
+  if (vis.contains(this))
+    return;
+  vis.insert(this);
+
   switch (tag) {
     case JMP:
       print_header(d);
-      next->print(d, this);
+      next->print_(d, vis);
       break;
     case ALT:
       print_header(d);
-      next->print(d + 1);
-      if (inc != alt)
-        alt->print(d + 1);
+      next->print_(d + 1, vis);
+      alt->print_(d + 1, vis);
       break;
     default:
       break;
   };
-  if (!d && !inc)
-    printf("[0]HALT\n");
+}
+
+void Label::print() {
+  std::set<Label*> vis;
+  print_(0, vis);
+  printf("[0]HALT\n");
 }
 
 bool Label::has_match() {

@@ -6,40 +6,53 @@ Label* parse_alt(const char*& p, Label*);
 
 Label* parse_atom(const char*& p, Label* tail) {
   char c = *p++;
-  std::bitset<256> bs(1);
+  std::bitset<(1 << ALPHABET_WIDTH)> bs[8 / ALPHABET_WIDTH] = {};
+
   switch (c) {
     case '.':
-      return ALLOC(Label{bs.set(), Label::JMP, tail});
-    case ')': {
-      Label* lbl = parse_alt(p, tail);
+      for (auto& s : bs)
+        s.set();
+      break;
+    case ')':
+      tail = parse_alt(p, tail);
       assert(*p++ == '(');
-      return lbl;
-    }
+      return tail;
     case ']':
-      bs.reset();
-      while ((c = *p++) != '[') {
+      while ((c = *p++) != '[')
         switch (c) {
           case '^':
-            bs.flip();
+            for (auto& s : bs)
+              s.flip();
             assert(p[0] == '[');
             break;
           case '-':
-            for (char i = *p++; i <= p[-3]; i++)
-              bs.set(i);
+            for (c = *p++; c <= p[-3]; c++) {
+              for (auto& s : bs) {
+                s.set(c % (1 << ALPHABET_WIDTH));
+                c /= (1 << ALPHABET_WIDTH);
+              }
+            }
             break;
           case 0:
             impossible;
           default:
-            bs.set(c);
+            for (auto& s : bs) {
+              s.set(c % (1 << ALPHABET_WIDTH));
+              c /= (1 << ALPHABET_WIDTH);
+            }
         }
-      }
-      return ALLOC(Label{bs, Label::JMP, tail});
-
+      break;
     default:
-      return ALLOC(Label{bs << c, Label::JMP, tail});
+      for (auto& s : bs) {
+        s.set(c % (1 << ALPHABET_WIDTH));
+        c /= (1 << ALPHABET_WIDTH);
+      }
   }
-  impossible;
-  return 0;
+
+  for (auto s : bs)
+    tail = ALLOC(Label{s, Label::JMP, tail});
+
+  return tail;
 }
 
 Label* parse_post(const char*& p, Label* tail) {
@@ -94,7 +107,14 @@ Label* parse_alt(const char*& p, Label* tail) {
   return alt;
 }
 
-DFA* compile(std::string p) {
+Label* compile(std::string p) {
+  std::reverse(p.begin(), p.end());
+  const char* s = &p.front();
+  Label* tail = ALLOC(Label{.tag = Label::HALT});
+  return parse_alt(s, tail);
+}
+
+DFA* compile_dfa(std::string p) {
   std::reverse(p.begin(), p.end());
   const char* s = &p.front();
   Label* tail = ALLOC(Label{.tag = Label::HALT});
@@ -150,5 +170,5 @@ std::string match(DFA* pat, std::string str) {
 }
 
 std::string match(const char* pat, const char* str) {
-  return match(compile(pat), str);
+  return match(compile_dfa(pat), str);
 }
