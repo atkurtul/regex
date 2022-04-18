@@ -1,15 +1,6 @@
 #include <stdio.h>
 #include "nfa.h"
 
-static DFA* init_trap() {
-  DFA* trap = ALLOC(DFA{});
-  for (int i = 0; i < (1 << ALPHABET_WIDTH); ++i)
-    trap->edges[i] = trap;
-  return trap;
-}
-
-DFA* DFA::trap = init_trap();
-
 void DFA::print_(std::set<DFA*>& visited) {
   if (visited.contains(this))
     return;
@@ -19,10 +10,14 @@ void DFA::print_(std::set<DFA*>& visited) {
   printf("%s[%d]:\n", tag[halt], id);
 
   for (int i = 0; i < (1 << ALPHABET_WIDTH); ++i)
-    printf("\t%d -> [ %d ]\n", i, edges[i]->id);
+    if (edges[i])
+      printf("\t%d -> [ %d ]\n", i, edges[i]->id);
+    else
+      printf("\t%d -> [ Trap ]\n", i);
 
-  for (int i = 0; i < (1 << ALPHABET_WIDTH); ++i)
-    edges[i]->print_(visited);
+  for (auto e : edges)
+    if (e)
+      e->print_(visited);
 }
 
 void DFA::print() {
@@ -35,8 +30,8 @@ void DFA::print_dot_(FILE* f, std::set<DFA*>& visited) {
     return;
   visited.insert(this);
 
-  const char* col[] = {"green", "yellow", "red"};
-  fprintf(f, "\t%d [style=filled;fillcolor=%s];\n", id, col[!halt + is_trap()]);
+  const char* col[] = {"green", "yellow"};
+  fprintf(f, "\t%d [style=filled;fillcolor=%s];\n", id, col[!halt]);
 
   std::map<DFA*, std::set<int>> next;
   std::map<DFA*, std::vector<std::pair<int, int>>> dfa_ranges;
@@ -60,7 +55,10 @@ void DFA::print_dot_(FILE* f, std::set<DFA*>& visited) {
   }
 
   for (auto [dfa, ranges] : dfa_ranges) {
-    fprintf(f, "\t%d -> %d [label=\"", id, dfa->id);
+    if (dfa)
+      fprintf(f, "\t%d -> %d [label=\"", id, dfa->id);
+    else
+      fprintf(f, "\t%d -> Trap [label=\"", id);
     for (auto& [l, r] : ranges) {
       if (l == r)
         fprintf(f, " %d ", l);
@@ -70,8 +68,9 @@ void DFA::print_dot_(FILE* f, std::set<DFA*>& visited) {
     fprintf(f, "\"];\n");
   }
 
-  for (int i = 0; i < (1 << ALPHABET_WIDTH); ++i)
-    edges[i]->print_dot_(f, visited);
+  for (auto e : edges)
+    if (e)
+      e->print_dot_(f, visited);
 }
 
 void DFA::print_dot(std::string file) {

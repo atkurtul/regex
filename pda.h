@@ -40,7 +40,6 @@ struct Terminal : Symbol {
 struct Rule : Symbol {
   std::vector<Symbol*> symbols;
   Rule(std::vector<Symbol*> symbols) : symbols(std::move(symbols)) {}
-
   void add(Symbol* rule) { symbols.push_back(rule); }
   int match(const char* str, u32 slen) override {
     printf("Matching rules against %.*s\n", slen, str);

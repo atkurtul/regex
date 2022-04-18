@@ -195,13 +195,13 @@ int match(DFA* state, const char* str, const u32 len) {
   int last = -1;
   int cur = 0;
 
-  while (!state->is_trap() && cur < len) {
+  while (state && cur < len) {
     if (state->halt)
       last = cur;
     state = state->edges[str[cur++]];
   }
 
-  if (state->halt)
+  if (state &&  state->halt)
     last = cur;
 
   return last;

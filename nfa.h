@@ -30,8 +30,6 @@ T* alloc(T t, const char* file, int line) {
   }
 
 struct DFA {
-  static DFA* trap;
-
   DFA* edges[(1 << ALPHABET_WIDTH)];
   bool halt;
   inline static int next_id = 0;
@@ -39,7 +37,6 @@ struct DFA {
   void print_(std::set<DFA*>& visited);
   void print();
 
-  bool is_trap() { return this == trap; }
   void print_dot_(FILE* f, std::set<DFA*>& visited);
   void print_dot(std::string file);
 
@@ -88,17 +85,17 @@ struct DFA {
     }
 
     for (auto& e : edges)
-      if (auto it = remap.find(e); it != remap.end())
-        e = it->second;
+      if (e)
+        if (auto it = remap.find(e); it != remap.end())
+          e = it->second;
   }
 
   static DFA* minimize(DFA* root) {
     std::set<DFA*> pool;
     std::map<DFA*, DFA*> remap;
-    root->gather(pool);
-
     std::set<u32> free_ids;
 
+    root->gather(pool);
     do {
       remap.clear();
       for (auto dfa : pool)
@@ -122,7 +119,8 @@ struct DFA {
       return;
     pool.insert(this);
     for (auto e : edges)
-      e->gather(pool);
+      if (e)
+        e->gather(pool);
   }
 };
 
@@ -161,7 +159,6 @@ struct NFA {
       return dfa->second;
 
     DFA* dfa = cache[nfa] = ALLOC(DFA{});
-
     for (int i = 0; i < (1 << ALPHABET_WIDTH); ++i) {
       std::set<NFA*> merged;
       for (auto n : nfa) {
@@ -176,7 +173,7 @@ struct NFA {
 
   DFA* to_dfa() {
     std::map<std::set<NFA*>, DFA*> cache;
-    cache[{}] = DFA::trap;
+    cache[{}] = 0;
     return to_dfa_(std::set<NFA*>{this}, cache);
   }
 };
